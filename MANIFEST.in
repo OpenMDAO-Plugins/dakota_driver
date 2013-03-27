@@ -1,0 +1,3 @@
+graft src/dakota_driver/sphinx_build/html
+recursive-include src/dakota_driver/test *.py
+
