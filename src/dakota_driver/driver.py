@@ -1,8 +1,8 @@
 from numpy import array
 
-from dakota import DAKOTAInput, run_dakota
+from dakota import DakotaInput, run_dakota
 
-from openmdao.main.datatypes.api import Float, Int, List
+from openmdao.main.datatypes.api import Bool, Enum, Float, Int, List, Str
 from openmdao.main.driver import Driver
 from openmdao.main.driver_uses_derivatives import DriverUsesDerivatives
 from openmdao.main.hasparameters import HasParameters
@@ -13,46 +13,50 @@ from openmdao.main.interfaces import IHasParameters, IHasIneqConstraints, \
                                      IOptimizer, implements
 from openmdao.util.decorators import add_delegate
 
-__all__ = ['DAKOTAoptimizer', 'DAKOTAstudy']
+__all__ = ['DakotaOptimizer', 'DakotaMultidimStudy', 'DakotaVectorStudy']
 
 
-class DAKOTAmixin(object):
-    """ Mixin for common DAKOTA operations. """
+class DakotaMixin(object):
+    """
+    Mixin for common DAKOTA operations, adds :class:`DakotaInput` instance.
+    The ``method`` and ``responses`` sections of `input` must be set
+    directly.  :meth:`set_variables` is typically used to set the ``variables``
+    section.
+    """
 
     def __init__(self):
-        self.input = DAKOTAInput()
+        # Set baseline input, don't touch 'interface'.
+        self.input = DakotaInput(strategy=['single_method'],
+                                 method=[],
+                                 model=['single'],
+                                 variables=[],
+                                 responses=[])
 
-    def run_dakota(self):
-        """
-        Call DAKOTA, providing self as data.
-        DAKOTA will then call our :meth:`dakota_callback`.
-        """
-        infile = self.get_pathname() + '.in'
-        self.input.write_input(infile)
-        run_dakota(infile, data=self)
+        self.add_trait('stdout', Str('', iotype='in',
+                                     desc='DAKOTA stdout filename'))
+        self.add_trait('stderr', Str('', iotype='in',
+                                     desc='DAKOTA stderr filename'))
+        self.add_trait('tabular_graphics_data',
+                       Bool(iotype='in',
+                            desc="Record evaluations to 'dakota_tabular.dat'"))
 
     def set_variables(self, need_start):
-        """ Set :class:`DAKOTAInput` `variables` section. """
+        """ Set :class:`DakotaInput` ``variables`` section. """
         parameters = self.get_parameters()
-        if not parameters:
-            self.raise_exception('No parameters, run aborted')
 
         initial = []
         lbounds = []
         ubounds = []
         names   = []
         for name, param in parameters.items():
-            if param.start is None:
-                initial.append(str(param.low + (param.high-param.low)/2.))
-            else:
-                initial.append(str(param.start))
+            start = param.evaluate() if param.start is None else param.start
+            initial.append(str(start))
             lbounds.append(str(param.low))
             ubounds.append(str(param.high))
             names.append("%r" % name)
 
-        self.input.variables = []
-        self.input.variables.append(
-            'continuous_design = %s' % len(parameters))
+        self.input.variables = [
+            'continuous_design = %s' % len(parameters)]
         if need_start:
             self.input.variables.append(
                 '    initial_point %s' % ' '.join(initial))
@@ -62,101 +66,250 @@ class DAKOTAmixin(object):
             '    descriptors   %s' % ' '.join(names)
         ])
 
+    def run_dakota(self):
+        """
+        Call DAKOTA, providing self as data, after enabling or disabling
+        tabular graphics data in the ``strategy`` section.
+        DAKOTA will then call our :meth:`dakota_callback` during the run.
+        """
+        if not self.input.method:
+            self.raise_exception('Method not set', ValueError)
+        if not self.input.variables:
+            self.raise_exception('Variables not set', ValueError)
+        if not self.input.responses:
+            self.raise_exception('Responses not set', ValueError)
 
-@add_delegate(HasParameters, HasIneqConstraints, HasObjective)
-class DAKOTAoptimizer(DriverUsesDerivatives, DAKOTAmixin):
-    """ Optimizer using DAKOTA Python interface. """
+        for i, line in enumerate(self.input.strategy):
+            if 'tabular_graphics_data' in line:
+                if not self.tabular_graphics_data:
+                    self.input.strategy[i] = \
+                        line.replace('tabular_graphics_data', '')
+                break
+        else:
+            if self.tabular_graphics_data:
+                self.input.strategy.append('tabular_graphics_data')
 
-    implements(IHasParameters, IHasIneqConstraints, IHasObjective, IOptimizer)
-
-    max_iterations = Int(100, iotype='in', low=1)
-    convergence_tolerance = Float(1.e-5, iotype='in', low=1.e-10)
-
-    def __init__(self):
-        DriverUsesDerivatives.__init__(self)
-        DAKOTAmixin.__init__(self)
-
-    def execute(self):
-        """ Write DAKOTA input and run. """
-        objectives = self.get_objectives()
-        if not objectives:
-            self.raise_exception('No objective, run aborted')
-
-        self.input.method = [
-            'conmin_frcg',
-            '    max_iterations = %s' % self.max_iterations,
-            '    convergence_tolerance = %s' % self.convergence_tolerance,
-        ]
-        self.set_variables(need_start=True)
-        self.input.responses = [
-            'objective_functions = %s' % len(objectives),
-            'numerical_gradients',
-            '    method_source dakota',
-            '    interval_type forward',
-            '    fd_gradient_step_size = 1.e-5',
-            '    no_hessians',
-        ]
-        self.run_dakota()
+        infile = self.get_pathname() + '.in'
+        self.input.write_input(infile)
+        run_dakota(infile, data=self, stdout=self.stdout, stderr=self.stderr)
 
     def dakota_callback(self, **kwargs):
-        """ Return repsonses from parameters. """
-        cv = kwargs['cv']    # Continuous variables.
-        asv = kwargs['asv']  # What to return (bit1=f, bit2=df, bit3=d^2f)
+        """
+        Return responses from parameters.  `kwargs` contains:
+
+        ========== ==============================================
+        Key        Definition
+        ========== ==============================================
+        functions  number of functions (responses, constraints)
+        ---------- ----------------------------------------------
+        variables  total number of variables
+        ---------- ----------------------------------------------
+	cv         list/array of continuous variable values
+        ---------- ----------------------------------------------
+        div        list/array of discrete integer variable values
+        ---------- ----------------------------------------------
+        drv        list/array of discrete real variable values
+        ---------- ----------------------------------------------
+        av         single list/array of all variable values
+        ---------- ----------------------------------------------
+        cv_labels  continuous variable labels
+        ---------- ----------------------------------------------
+        div_labels discrete integer variable labels
+        ---------- ----------------------------------------------
+        drv_labels discrete real variable labels
+        ---------- ----------------------------------------------
+        av_labels  all variable labels
+        ---------- ----------------------------------------------
+        asv        active set vector (bit1=f, bit2=df, bit3=d^2f)
+        ---------- ----------------------------------------------
+        dvv        derivative variables vector
+        ---------- ----------------------------------------------
+        currEvalId current evaluation ID number
+        ---------- ----------------------------------------------
+        user_data  this object
+        ========== ==============================================
+        
+        """
+        cv = kwargs['cv']
+        asv = kwargs['asv']
         self._logger.debug('cv %s', cv)
         self._logger.debug('asv %s', asv)
 
         self.set_parameters(cv)
         self.run_iteration()
 
-# TODO: support full asv.
-        val = self.eval_objective()
-        retval = dict(fns=array([val]))
+        expressions = self.get_objectives().values()
+        expressions.extend(self.get_ineq_constraints().values())
+
+        fns = []
+        for i, expr in enumerate(expressions):
+            if asv[i] & 1:
+                result = expr.evaluate(self.parent)
+                if isinstance(result, tuple):
+                    lhs, rhs, op, violated = result
+                    if '>' in op:
+                        result = rhs - lhs
+                    else:
+                        result = lhs - rhs
+                fns.append(result)
+            if asv[i] & 2:
+                self.raise_exception('Gradients not supported yet',
+                                     NotImplementedError)
+            if asv[i] & 4:
+                self.raise_exception('Hessians not supported yet',
+                                     NotImplementedError)
+
+        retval = dict(fns=array(fns))
         self._logger.debug('returning %s', retval)
         return retval
 
 
-@add_delegate(HasParameters, HasObjectives)
-class DAKOTAstudy(Driver, DAKOTAmixin):
-    """ Parameter study using DAKOTA Python interface. """
+@add_delegate(HasParameters, HasIneqConstraints, HasObjective)
+class DakotaOptimizer(DriverUsesDerivatives, DakotaMixin):
+    """ Optimizer using DAKOTA Python interface. """
 
-    implements(IHasParameters, IHasObjectives)
+    implements(IHasParameters, IHasIneqConstraints, IHasObjective, IOptimizer)
 
-    partitions = List(Int, io_type='in', low=1)
+    max_iterations = Int(100, low=1, iotype='in')
+    convergence_tolerance = Float(1.e-7, low=1.e-10, iotype='in')
+    fd_gradient_step_size = Float(1.e-5, low=1.e-10, iotype='in')
+    interval_type = Enum(values=('forward', 'central'), iotype='in')
 
     def __init__(self):
-        Driver.__init__(self)
-        DAKOTAmixin.__init__(self)
+        DriverUsesDerivatives.__init__(self)
+        DakotaMixin.__init__(self)
+
+    def check_config(self):
+        """ Verify valid configuration. """
+        super(DakotaOptimizer, self).check_config()
+
+        parameters = self.get_parameters()
+        if not parameters:
+            self.raise_exception('No parameters, run aborted', ValueError)
+
+        objectives = self.get_objectives()
+        if not objectives:
+            self.raise_exception('No objectives, run aborted', ValueError)
 
     def execute(self):
         """ Write DAKOTA input and run. """
+        ineq_constraints = self.get_ineq_constraints()
+        objectives = self.get_objectives()
+        method = 'conmin_mfd' if ineq_constraints else 'conmin_frcg'
+
+        self.input.method = [
+            '%s' % method,
+            '    max_iterations = %s' % self.max_iterations,
+            '    convergence_tolerance = %s' % self.convergence_tolerance,
+        ]
+        self.set_variables(need_start=True)
+        self.input.responses = [
+            'objective_functions = %s' % len(objectives)]
+        if ineq_constraints:
+            self.input.responses.append(
+                'nonlinear_inequality_constraints = %s' % len(ineq_constraints))
+        self.input.responses.extend([
+            'numerical_gradients',
+            '    method_source dakota',
+            '    interval_type %s' % self.interval_type,
+            '    fd_gradient_step_size = %s' % self.fd_gradient_step_size,
+            '    no_hessians',
+        ])
+        self.run_dakota()
+
+
+@add_delegate(HasParameters, HasObjectives)
+class DakotaMultidimStudy(Driver, DakotaMixin):
+    """ Multidimensional parameter study using DAKOTA Python interface. """
+
+    implements(IHasParameters, IHasObjectives)
+
+    partitions = List(Int, low=1, iotype='in')
+
+    def __init__(self):
+        Driver.__init__(self)
+        DakotaMixin.__init__(self)
+
+    def check_config(self):
+        """ Verify valid configuration. """
+        super(DakotaMultidimStudy, self).check_config()
+
         parameters = self.get_parameters()
-        partitions = [str(partition) for partition in self.partitions]
-        if len(partitions) != len(parameters):
-            self.raise_exception('#partitions %s != #parameters (%s)'
-                                 % (len(partitions), len(parameters)),
+        if not parameters:
+            self.raise_exception('No parameters, run aborted', ValueError)
+
+        if len(self.partitions) != len(parameters):
+            self.raise_exception('#partitions (%s) != #parameters (%s)'
+                                 % (len(self.partitions), len(parameters)),
                                  ValueError)
 
         objectives = self.get_objectives()
         if not objectives:
-            self.raise_exception('No objectives, run aborted')
+            self.raise_exception('No objectives, run aborted', ValueError)
+
+    def execute(self):
+        """ Write DAKOTA input and run. """
+        partitions = [str(partition) for partition in self.partitions]
+        objectives = self.get_objectives()
 
         self.input.method = [
             'multidim_parameter_study',
             '    partitions = %s' % ' '.join(partitions)
         ]
         self.set_variables(need_start=False)
+        self.input.responses = [
+            'objective_functions = %s' % len(objectives),
+            'no_gradients',
+            'no_hessians',
+        ]
         self.run_dakota()
 
-    def dakota_callback(self, **kwargs):
-        """ Return repsonses from parameters. """
-        cv = kwargs['cv']    # Continuous variables.
-        self._logger.debug('cv %s', cv)
 
-        self.set_parameters(cv)
-        self.run_iteration()
+@add_delegate(HasParameters, HasObjectives)
+class DakotaVectorStudy(Driver, DakotaMixin):
+    """ Vector parameter study using DAKOTA Python interface. """
 
-        vals = self.eval_objectives()
-        retval = dict(fns=array(vals))
-        self._logger.debug('returning %s', retval)
-        return retval
+    implements(IHasParameters, IHasObjectives)
+
+    final_point = List(Float, iotype='in')
+    num_steps = Int(1, low=1, iotype='in')
+
+    def __init__(self):
+        Driver.__init__(self)
+        DakotaMixin.__init__(self)
+
+    def check_config(self):
+        """ Verify valid configuration. """
+        super(DakotaVectorStudy, self).check_config()
+
+        parameters = self.get_parameters()
+        if not parameters:
+            self.raise_exception('No parameters, run aborted', ValueError)
+
+        if len(self.final_point) != len(parameters):
+            self.raise_exception('#final_point (%s) != #parameters (%s)'
+                                 % (len(self.final_point), len(parameters)),
+                                 ValueError)
+
+        objectives = self.get_objectives()
+        if not objectives:
+            self.raise_exception('No objectives, run aborted', ValueError)
+
+    def execute(self):
+        """ Write DAKOTA input and run. """
+        final_point = [str(point) for point in self.final_point]
+        objectives = self.get_objectives()
+
+        self.input.method = [
+            'vector_parameter_study',
+            '    final_point = %s' % ' '.join(final_point),
+            '    num_steps = %s' % self.num_steps,
+        ]
+        self.set_variables(need_start=False)
+        self.input.responses = [
+            'objective_functions = %s' % len(objectives),
+            'no_gradients',
+            'no_hessians',
+        ]
+        self.run_dakota()
 

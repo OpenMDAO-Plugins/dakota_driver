@@ -13,16 +13,19 @@ Package Metadata
 - **entry_points**:: 
 
     [openmdao.component]
-    dakota_driver.driver.DAKOTAoptimizer=dakota_driver.driver:DAKOTAoptimizer
-    dakota_driver.driver.DAKOTAstudy=dakota_driver.driver:DAKOTAstudy
+    dakota_driver.driver.DakotaOptimizer=dakota_driver.driver:DakotaOptimizer
+    dakota_driver.driver.DakotaVectorStudy=dakota_driver.driver:DakotaVectorStudy
+    dakota_driver.driver.DakotaMultidimStudy=dakota_driver.driver:DakotaMultidimStudy
     [openmdao.driver]
-    dakota_driver.driver.DAKOTAoptimizer=dakota_driver.driver:DAKOTAoptimizer
-    dakota_driver.driver.DAKOTAstudy=dakota_driver.driver:DAKOTAstudy
+    dakota_driver.driver.DakotaOptimizer=dakota_driver.driver:DakotaOptimizer
+    dakota_driver.driver.DakotaVectorStudy=dakota_driver.driver:DakotaVectorStudy
+    dakota_driver.driver.DakotaMultidimStudy=dakota_driver.driver:DakotaMultidimStudy
     [openmdao.container]
-    dakota_driver.driver.DAKOTAoptimizer=dakota_driver.driver:DAKOTAoptimizer
-    dakota_driver.driver.DAKOTAstudy=dakota_driver.driver:DAKOTAstudy
+    dakota_driver.driver.DakotaOptimizer=dakota_driver.driver:DakotaOptimizer
+    dakota_driver.driver.DakotaVectorStudy=dakota_driver.driver:DakotaVectorStudy
+    dakota_driver.driver.DakotaMultidimStudy=dakota_driver.driver:DakotaMultidimStudy
 
-- **home-page:** https://github.com/OpenMDAO-Plugins/dakota-driver
+- **home-page:** https://github.com/OpenMDAO-Plugins/dakota_driver
 
 - **keywords:** openmdao
 
@@ -30,7 +33,10 @@ Package Metadata
 
 - **name:** dakota_driver
 
-- **requires-dist:** openmdao.main
+- **requires-dist**:: 
+
+    openmdao.main
+    pyDAKOTA
 
 - **requires-python**:: 
 
