@@ -91,7 +91,10 @@ class DakotaMixin(object):
 
         infile = self.get_pathname() + '.in'
         self.input.write_input(infile)
-        run_dakota(infile, data=self, stdout=self.stdout, stderr=self.stderr)
+        try:
+            run_dakota(infile, data=self, stdout=self.stdout, stderr=self.stderr)
+        except Exception:
+            self.reraise_exception()
 
     def dakota_callback(self, **kwargs):
         """
@@ -139,7 +142,10 @@ class DakotaMixin(object):
         self.run_iteration()
 
         expressions = self.get_objectives().values()
-        expressions.extend(self.get_ineq_constraints().values())
+        if hasattr(self, 'get_eq_constraints'):
+            expressions.extend(self.get_eq_constraints().values())
+        if hasattr(self, 'get_ineq_constraints'):
+            expressions.extend(self.get_ineq_constraints().values())
 
         fns = []
         for i, expr in enumerate(expressions):

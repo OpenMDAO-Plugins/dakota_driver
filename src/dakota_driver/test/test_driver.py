@@ -8,7 +8,7 @@ import unittest
 
 from openmdao.main.api import Component, Assembly
 from openmdao.main.datatypes.api import Float
-from openmdao.util.testutil import assert_rel_error
+from openmdao.util.testutil import assert_rel_error, assert_raises
 
 from dakota_driver import DakotaOptimizer, DakotaMultidimStudy, \
                           DakotaVectorStudy
@@ -149,7 +149,7 @@ class TestCase(unittest.TestCase):
             if os.path.exists(name):
                 os.remove(name)
 
-    def zest_optimization(self):
+    def test_optimization(self):
         # Test DakotaOptimizer driver.
         top = Optimization()
         top.run()
@@ -182,15 +182,17 @@ class TestCase(unittest.TestCase):
         assert_rel_error(self, top.textbook.x2, 0.43167254, 0.00001)
         assert_rel_error(self, top.textbook.f,  0.16682649, 0.00001)
 
-    def zest_broken_optimization(self):
-        # Test exception handling.
-        # Disabled since this will terminate Python.
-        raise nose.SkipTest('Terminates Python')
+    def test_broken_optimization(self):
+        # Test exception handling. This requires a modified version of
+        # DAKOTA that can be configured to not exit on analysis failure.
         top = Optimization()
+        # Avoid messing-up file for test_optimization.
+        top.driver.tabular_graphics_data = False
         top.rosenbrock = Broken()
-        top.run()
+        assert_raises(self, 'top.run()', globals(), locals(), RuntimeError,
+                      'driver: Evaluating x1=-1.2, x2=1.0')
 
-    def zest_multidim(self):
+    def test_multidim(self):
         # Test DakotaMultidimStudy driver.
         top = ParameterStudy()
         top.run()
@@ -198,7 +200,7 @@ class TestCase(unittest.TestCase):
         self.assertEqual(top.rosenbrock.x2, 2)
         self.assertEqual(top.rosenbrock.f,  401)
 
-    def zest_vector(self):
+    def test_vector(self):
         # Test DakotaVectorStudy driver.
         top = VectorStudy()
         top.run()
