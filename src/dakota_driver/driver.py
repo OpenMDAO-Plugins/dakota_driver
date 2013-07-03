@@ -32,13 +32,13 @@ class DakotaMixin(object):
                                  variables=[],
                                  responses=[])
 
-        self.add_trait('stdout', Str('', iotype='in',
-                                     desc='DAKOTA stdout filename'))
-        self.add_trait('stderr', Str('', iotype='in',
-                                     desc='DAKOTA stderr filename'))
-        self.add_trait('tabular_graphics_data',
-                       Bool(iotype='in',
-                            desc="Record evaluations to 'dakota_tabular.dat'"))
+        self.add('stdout', Str('', iotype='in',
+                               desc='DAKOTA stdout filename'))
+        self.add('stderr', Str('', iotype='in',
+                               desc='DAKOTA stderr filename'))
+        self.add('tabular_graphics_data',
+                 Bool(iotype='in',
+                      desc="Record evaluations to 'dakota_tabular.dat'"))
 
     def set_variables(self, need_start):
         """ Set :class:`DakotaInput` ``variables`` section. """
