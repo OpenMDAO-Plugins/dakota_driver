@@ -1,6 +1,7 @@
 """ Test DAKOTA-based drivers. """
 
 import csv
+import logging
 import nose
 import os.path
 import sys
@@ -147,10 +148,17 @@ class TestCase(unittest.TestCase):
         for name in ('dakota.out', 'dakota.err',
                      'dakota.rst', 'dakota_tabular.dat', 'driver.in'):
             if os.path.exists(name):
-                os.remove(name)
+                try:
+                    os.remove(name)
+                except WindowsError as exc:
+                    # Currently no way to release DAKOTA streams.
+                    logging.debug("Can't remove %s: %s", name, exc)
 
     def test_optimization(self):
         # Test DakotaOptimizer driver.
+        logging.debug('')
+        logging.debug('test_optimization')
+
         top = Optimization()
         top.run()
         # Current state isn't optimium,
@@ -174,6 +182,9 @@ class TestCase(unittest.TestCase):
 
     def test_constrained_optimization(self):
         # Test DakotaOptimizer driver.
+        logging.debug('')
+        logging.debug('test_constrained_optimization')
+
         top = ConstrainedOptimization()
         top.run()
         # Current state isn't optimium,
@@ -185,7 +196,10 @@ class TestCase(unittest.TestCase):
     def test_broken_optimization(self):
         # Test exception handling. This requires a modified version of
         # DAKOTA that can be configured to not exit on analysis failure.
-        raise nose.SkipTest('Requires abort_returns() modification to DAKOTA')
+        logging.debug('')
+        logging.debug('test_broken_optimization')
+
+#        raise nose.SkipTest('Requires abort_returns() modification to DAKOTA')
         top = Optimization()
         # Avoid messing-up file for test_optimization.
         top.driver.tabular_graphics_data = False
@@ -195,6 +209,9 @@ class TestCase(unittest.TestCase):
 
     def test_multidim(self):
         # Test DakotaMultidimStudy driver.
+        logging.debug('')
+        logging.debug('test_multidim')
+
         top = ParameterStudy()
         top.run()
         self.assertEqual(top.rosenbrock.x1, 2)
@@ -203,6 +220,9 @@ class TestCase(unittest.TestCase):
 
     def test_vector(self):
         # Test DakotaVectorStudy driver.
+        logging.debug('')
+        logging.debug('test_vector')
+
         top = VectorStudy()
         top.run()
         assert_rel_error(self, top.rosenbrock.x1, 1.1, 0.00001)
