@@ -20,3 +20,16 @@ driver.py
    :show-inheritance:
 
         
+.. index:: test_driver.py
+
+.. _dakota_driver.test.test_driver.py:
+
+test_driver.py
+--------------
+
+.. automodule:: dakota_driver.test.test_driver
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+        

@@ -1,31 +1,31 @@
 """ Test DAKOTA-based drivers. """
 
 import csv
+import glob
 import logging
 import nose
 import os.path
 import sys
 import unittest
 
-from openmdao.main.api import Component, Assembly
-from openmdao.main.datatypes.api import Float
+from openmdao.main.api import Component, Assembly, set_as_top
+from openmdao.main.datatypes.api import Array, Float
 from openmdao.util.testutil import assert_rel_error, assert_raises
 
 from dakota_driver import DakotaOptimizer, DakotaMultidimStudy, \
-                          DakotaVectorStudy
+                          DakotaVectorStudy, DakotaGlobalSAStudy
 
 
 class Rosenbrock(Component):
     """ Standard two-dimensional Rosenbrock function. """
 
-    x1 = Float(iotype='in')
-    x2 = Float(iotype='in')
-    f  = Float(iotype='out')
+    x = Array([0., 0.], iotype='in')
+    f = Float(iotype='out')
 
     def execute(self):
         """ Just evaluate the function. """
-        x1 = self.x1
-        x2 = self.x2
+        x1 = self.x[0]
+        x2 = self.x[1]
         self.f = 100 * (x2 - x1**2)**2 + (1 - x1)**2
 
 
@@ -71,8 +71,7 @@ class Optimization(Assembly):
         driver.interval_type = 'forward'
         driver.fd_gradient_step_size = 1e-5
 
-        driver.add_parameter('rosenbrock.x1', low=-2, high=2, start=-1.2)
-        driver.add_parameter('rosenbrock.x2', low=-2, high=2, start=1)
+        driver.add_parameter('rosenbrock.x', low=-2, high=2, start=(-1.2, 1))
         driver.add_objective('rosenbrock.f')
 
 
@@ -114,8 +113,7 @@ class ParameterStudy(Assembly):
         driver.stderr = 'dakota.err'
         driver.partitions = [8, 8]
 
-        driver.add_parameter('rosenbrock.x1', low=-2, high=2)
-        driver.add_parameter('rosenbrock.x2', low=-2, high=2)
+        driver.add_parameter('rosenbrock.x', low=-2, high=2)
         driver.add_objective('rosenbrock.f')
 
 
@@ -135,8 +133,25 @@ class VectorStudy(Assembly):
         driver.num_steps = 10
 
         # Can't have parameter with no 'low' or 'high' defined.
-        driver.add_parameter('rosenbrock.x1', start=-0.3, low=-1e10, high=1.e10)
-        driver.add_parameter('rosenbrock.x2', start=0.2, low=-1e10, high=1.e10)
+        driver.add_parameter('rosenbrock.x', start=(-0.3, 0.2), low=-1e10, high=1.e10)
+        driver.add_objective('rosenbrock.f')
+
+
+class SensitivityStudy(Assembly):
+    """ Use DAKOTA to run a global sensitivity study. """
+
+    def configure(self):
+        """ Configure driver and its workflow. """
+        super(Assembly, self).configure()
+        self.add('rosenbrock', Rosenbrock()) 
+
+        driver = self.add('driver', DakotaGlobalSAStudy())
+        driver.workflow.add('rosenbrock')
+        driver.stdout = 'dakota.out'
+        driver.stderr = 'dakota.err'
+        driver.tabular_graphics_data = True
+
+        driver.add_parameter('rosenbrock.x', low=-2, high=2)
         driver.add_objective('rosenbrock.f')
 
 
@@ -145,9 +160,9 @@ class TestCase(unittest.TestCase):
 
     def tearDown(self):
         """ Cleanup files. """
-        for name in ('dakota.out', 'dakota.err',
-                     'dakota.rst', 'dakota_tabular.dat', 'driver.in'):
-            if os.path.exists(name):
+        for pattern in ('LHS*', 'S4', 'dakota.out', 'dakota.err',
+                        'dakota.rst', 'dakota_tabular.dat', 'driver.in'):
+            for name in glob.glob(pattern):
                 try:
                     os.remove(name)
                 except WindowsError as exc:
@@ -163,15 +178,15 @@ class TestCase(unittest.TestCase):
         top.run()
         # Current state isn't optimium,
         # probably left over from CONMIN line search.
-        assert_rel_error(self, top.rosenbrock.x1, 0.99401209, 0.00001)
-        assert_rel_error(self, top.rosenbrock.x2, 0.98869321, 0.00001)
+        assert_rel_error(self, top.rosenbrock.x[0], 0.99401209, 0.00001)
+        assert_rel_error(self, top.rosenbrock.x[1], 0.98869321, 0.00001)
         assert_rel_error(self, top.rosenbrock.f,  7.59464541e-05, 0.00001)
 
         with open('dakota_tabular.dat', 'rb') as inp:
             reader = csv.reader(inp, delimiter=' ', skipinitialspace=True)
             count = 0
             for row in reader:
-                print row
+                #print row
                 count += 1
 
         self.assertEqual(count, 83)
@@ -193,6 +208,14 @@ class TestCase(unittest.TestCase):
         assert_rel_error(self, top.textbook.x2, 0.43167254, 0.0004)
         assert_rel_error(self, top.textbook.f,  0.16682649, 0.0007)
 
+        top.driver.clear_objectives()
+        assert_raises(self, 'top.run()', globals(), locals(), ValueError,
+                      'driver: No objectives, run aborted')
+
+        top.driver.clear_parameters()
+        assert_raises(self, 'top.run()', globals(), locals(), ValueError,
+                      'driver: No parameters, run aborted')
+
     def test_broken_optimization(self):
         # Test exception handling. This requires a modified version of
         # DAKOTA that can be configured to not exit on analysis failure.
@@ -200,12 +223,12 @@ class TestCase(unittest.TestCase):
         logging.debug('test_broken_optimization')
 
 #        raise nose.SkipTest('Requires abort_returns() modification to DAKOTA')
-        top = Optimization()
+        top = ConstrainedOptimization()
         # Avoid messing-up file for test_optimization.
         top.driver.tabular_graphics_data = False
-        top.rosenbrock = Broken()
+        top.textbook = Broken()
         assert_raises(self, 'top.run()', globals(), locals(), RuntimeError,
-                      'driver: Evaluating x1=-1.2, x2=1.0')
+                      'driver: Evaluating x1=0.9, x2=1.1')
 
     def test_multidim(self):
         # Test DakotaMultidimStudy driver.
@@ -214,9 +237,21 @@ class TestCase(unittest.TestCase):
 
         top = ParameterStudy()
         top.run()
-        self.assertEqual(top.rosenbrock.x1, 2)
-        self.assertEqual(top.rosenbrock.x2, 2)
+        self.assertEqual(top.rosenbrock.x[0], 2)
+        self.assertEqual(top.rosenbrock.x[1], 2)
         self.assertEqual(top.rosenbrock.f,  401)
+
+        top.driver.clear_objectives()
+        assert_raises(self, 'top.run()', globals(), locals(), ValueError,
+                      'driver: No objectives, run aborted')
+
+        top.driver.partitions = [8, 8, 999]
+        assert_raises(self, 'top.run()', globals(), locals(), ValueError,
+                      'driver: #partitions (3) != #parameters (2)')
+
+        top.driver.clear_parameters()
+        assert_raises(self, 'top.run()', globals(), locals(), ValueError,
+                      'driver: No parameters, run aborted')
 
     def test_vector(self):
         # Test DakotaVectorStudy driver.
@@ -225,9 +260,49 @@ class TestCase(unittest.TestCase):
 
         top = VectorStudy()
         top.run()
-        assert_rel_error(self, top.rosenbrock.x1, 1.1, 0.00001)
-        assert_rel_error(self, top.rosenbrock.x2, 1.3, 0.00001)
+        assert_rel_error(self, top.rosenbrock.x[0], 1.1, 0.00001)
+        assert_rel_error(self, top.rosenbrock.x[1], 1.3, 0.00001)
         assert_rel_error(self, top.rosenbrock.f,  0.82, 0.00001)
+
+        top.driver.clear_objectives()
+        assert_raises(self, 'top.run()', globals(), locals(), ValueError,
+                      'driver: No objectives, run aborted')
+
+        top.driver.final_point = [1.1, 1.3, 999]
+        assert_raises(self, 'top.run()', globals(), locals(), ValueError,
+                      'driver: #final_point (3) != #parameters (2)')
+
+        top.driver.clear_parameters()
+        assert_raises(self, 'top.run()', globals(), locals(), ValueError,
+                      'driver: No parameters, run aborted')
+
+    def test_sensitivity(self):
+        # Test DakotaGlobalSAStudy driver.
+        logging.debug('')
+        logging.debug('test_sensitivity')
+
+        top = SensitivityStudy()
+        top.run()
+        assert_rel_error(self, top.rosenbrock.x[0],  1.091489532, 0.00001)
+        assert_rel_error(self, top.rosenbrock.x[1], -1.415779759, 0.00001)
+        assert_rel_error(self, top.rosenbrock.f,   679.7206145, 0.00001)
+
+# Can't re-use DAKOTA stream when closed in tearDown.
+#        with open('dakota_tabular.dat', 'rb') as inp:
+#            reader = csv.reader(inp, delimiter=' ', skipinitialspace=True)
+#            count = 0
+#            for row in reader:
+#                #print row
+#                count += 1
+#        self.assertEqual(count, 101)
+
+        top.driver.clear_objectives()
+        assert_raises(self, 'top.run()', globals(), locals(), ValueError,
+                      'driver: No objectives, run aborted')
+
+        top.driver.clear_parameters()
+        assert_raises(self, 'top.run()', globals(), locals(), ValueError,
+                      'driver: No parameters, run aborted')
 
 
 if __name__ == '__main__':
