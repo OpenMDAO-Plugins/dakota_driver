@@ -13,38 +13,41 @@ Package Metadata
 - **entry_points**:: 
 
     [openmdao.component]
-    dakota_driver.driver.DakotaOptimizer=dakota_driver.driver:DakotaOptimizer
-    test_driver.Textbook=test_driver:Textbook
+    dakota_driver.test.test_driver.VectorStudy=dakota_driver.test.test_driver:VectorStudy
+    dakota_driver.test.test_driver.ConstrainedOptimization=dakota_driver.test.test_driver:ConstrainedOptimization
+    dakota_driver.driver.DakotaCONMIN=dakota_driver.driver:DakotaCONMIN
     dakota_driver.driver.DakotaVectorStudy=dakota_driver.driver:DakotaVectorStudy
-    test_driver.Broken=test_driver:Broken
-    test_driver.SensitivityStudy=test_driver:SensitivityStudy
-    test_driver.Rosenbrock=test_driver:Rosenbrock
-    test_driver.ConstrainedOptimization=test_driver:ConstrainedOptimization
-    dakota_driver.driver.DakotaGlobalSAStudy=dakota_driver.driver:DakotaGlobalSAStudy
+    dakota_driver.test.test_driver.Textbook=dakota_driver.test.test_driver:Textbook
+    dakota_driver.test.test_driver.ParameterStudy=dakota_driver.test.test_driver:ParameterStudy
+    dakota_driver.test.test_driver.SensitivityStudy=dakota_driver.test.test_driver:SensitivityStudy
     dakota_driver.driver.DakotaBase=dakota_driver.driver:DakotaBase
-    test_driver.ParameterStudy=test_driver:ParameterStudy
-    test_driver.VectorStudy=test_driver:VectorStudy
-    test_driver.Optimization=test_driver:Optimization
+    dakota_driver.test.test_driver.Optimization=dakota_driver.test.test_driver:Optimization
+    dakota_driver.test.test_driver.Rosenbrock=dakota_driver.test.test_driver:Rosenbrock
+    dakota_driver.driver.DakotaGlobalSAStudy=dakota_driver.driver:DakotaGlobalSAStudy
+    dakota_driver.driver.DakotaOptimizer=dakota_driver.driver:DakotaOptimizer
+    dakota_driver.test.test_driver.Broken=dakota_driver.test.test_driver:Broken
     dakota_driver.driver.DakotaMultidimStudy=dakota_driver.driver:DakotaMultidimStudy
     [openmdao.driver]
     dakota_driver.driver.DakotaOptimizer=dakota_driver.driver:DakotaOptimizer
     dakota_driver.driver.DakotaVectorStudy=dakota_driver.driver:DakotaVectorStudy
+    dakota_driver.driver.DakotaCONMIN=dakota_driver.driver:DakotaCONMIN
     dakota_driver.driver.DakotaBase=dakota_driver.driver:DakotaBase
     dakota_driver.driver.DakotaGlobalSAStudy=dakota_driver.driver:DakotaGlobalSAStudy
     dakota_driver.driver.DakotaMultidimStudy=dakota_driver.driver:DakotaMultidimStudy
     [openmdao.container]
-    test_driver.Textbook=test_driver:Textbook
-    dakota_driver.driver.DakotaOptimizer=dakota_driver.driver:DakotaOptimizer
+    dakota_driver.test.test_driver.VectorStudy=dakota_driver.test.test_driver:VectorStudy
+    dakota_driver.test.test_driver.ConstrainedOptimization=dakota_driver.test.test_driver:ConstrainedOptimization
+    dakota_driver.driver.DakotaCONMIN=dakota_driver.driver:DakotaCONMIN
     dakota_driver.driver.DakotaVectorStudy=dakota_driver.driver:DakotaVectorStudy
-    test_driver.Broken=test_driver:Broken
-    test_driver.SensitivityStudy=test_driver:SensitivityStudy
-    test_driver.Rosenbrock=test_driver:Rosenbrock
-    test_driver.ConstrainedOptimization=test_driver:ConstrainedOptimization
-    dakota_driver.driver.DakotaGlobalSAStudy=dakota_driver.driver:DakotaGlobalSAStudy
+    dakota_driver.test.test_driver.Textbook=dakota_driver.test.test_driver:Textbook
+    dakota_driver.test.test_driver.ParameterStudy=dakota_driver.test.test_driver:ParameterStudy
+    dakota_driver.test.test_driver.SensitivityStudy=dakota_driver.test.test_driver:SensitivityStudy
     dakota_driver.driver.DakotaBase=dakota_driver.driver:DakotaBase
-    test_driver.ParameterStudy=test_driver:ParameterStudy
-    test_driver.VectorStudy=test_driver:VectorStudy
-    test_driver.Optimization=test_driver:Optimization
+    dakota_driver.test.test_driver.Optimization=dakota_driver.test.test_driver:Optimization
+    dakota_driver.test.test_driver.Rosenbrock=dakota_driver.test.test_driver:Rosenbrock
+    dakota_driver.driver.DakotaGlobalSAStudy=dakota_driver.driver:DakotaGlobalSAStudy
+    dakota_driver.driver.DakotaOptimizer=dakota_driver.driver:DakotaOptimizer
+    dakota_driver.test.test_driver.Broken=dakota_driver.test.test_driver:Broken
     dakota_driver.driver.DakotaMultidimStudy=dakota_driver.driver:DakotaMultidimStudy
 
 - **home-page:** https://github.com/OpenMDAO-Plugins/dakota_driver

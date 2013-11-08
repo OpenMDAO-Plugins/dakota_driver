@@ -11,7 +11,7 @@ optimization example from section 2.4.2.2 of the DAKOTA User's Manual:
 
     from openmdao.main.api import Component, Assembly
     from openmdao.main.datatypes.api import Float
-    from dakota_driver import DakotaOptimizer
+    from dakota_driver import DakotaCONMIN
 
     class Textbook(Component):
         """ DAKOTA 'text_book' function. """
@@ -32,7 +32,7 @@ optimization example from section 2.4.2.2 of the DAKOTA User's Manual:
             super(Assembly, self).configure()
             self.add('textbook', Textbook())
 
-            driver = self.add('driver', DakotaOptimizer())
+            driver = self.add('driver', DakotaCONMIN())
             driver.workflow.add('textbook')
             driver.stdout = 'dakota.out'
             driver.stderr = 'dakota.err'

@@ -1,9 +1,15 @@
 """
 A collection of drivers using DAKOTA to exercise the workflow.
+The general scheme is to have a separate class for each separate DAKOTA
+method type.
+
 Currently these drivers simply run the workflow, they do not parse any
-DAKOTA results.  Additionally, since DAKOTA streams are not closed until the
-process exits, multiple runs, even from separate drivers, append to the
-outputs.
+DAKOTA results.
+
+.. note::
+    Until DAKOTA implements some patches output streams are not closed until
+    the process exits. Multiple runs, even from separate drivers, append to
+    the outputs.
 """
 
 from numpy import array, ndindex
@@ -20,8 +26,8 @@ from openmdao.main.interfaces import IHasParameters, IHasIneqConstraints, \
                                      IOptimizer, implements
 from openmdao.util.decorators import add_delegate
 
-__all__ = ['DakotaOptimizer', 'DakotaMultidimStudy', 'DakotaVectorStudy',
-           'DakotaGlobalSAStudy', 'DakotaBase']
+__all__ = ['DakotaCONMIN', 'DakotaMultidimStudy', 'DakotaVectorStudy',
+           'DakotaGlobalSAStudy', 'DakotaOptimizer', 'DakotaBase']
 
 
 @add_delegate(HasParameters, HasObjectives)
@@ -35,6 +41,8 @@ class DakotaBase(Driver):
 
     implements(IHasParameters, IHasObjectives)
 
+    output = Enum('normal', iotype='in', desc='Output verbosity',
+                  values=('silent', 'quiet', 'normal', 'verbose', 'debug'))
     stdout = Str('', iotype='in', desc='DAKOTA stdout filename')
     stderr = Str('', iotype='in', desc='DAKOTA stderr filename')
     tabular_graphics_data = \
@@ -50,6 +58,27 @@ class DakotaBase(Driver):
                                  model=['single'],
                                  variables=[],
                                  responses=[])
+
+    def check_config(self):
+        """ Verify valid configuration. """
+        super(DakotaBase, self).check_config()
+
+        parameters = self.get_parameters()
+        if not parameters:
+            self.raise_exception('No parameters, run aborted', ValueError)
+
+        objectives = self.get_objectives()
+        if not objectives:
+            self.raise_exception('No objectives, run aborted', ValueError)
+
+    def configure_input(self):
+        """ Configures input specification, must be overridden. """
+        self.raise_exception('configure_input', NotImplementedError)
+
+    def execute(self):
+        """ Write DAKOTA input and run. """
+        self.configure_input()
+        self.run_dakota()
 
     def set_variables(self, need_start, uniform=False):
         """ Set :class:`DakotaInput` ``variables`` section. """
@@ -177,53 +206,55 @@ class DakotaBase(Driver):
         return retval
 
 
-@add_delegate(HasIneqConstraints)
 class DakotaOptimizer(DakotaBase):
-    """
-    Optimizer using DAKOTA Python interface, currently limited to the
-    ``conmin_mfd`` and ``conmin_frcg`` methods.
-    """
+    """ Base class for optimizers using the DAKOTA Python interface. """
+    # Currently only a 'marker' class.
 
-    implements(IHasIneqConstraints, IOptimizer)
+    implements(IOptimizer)
+
+
+@add_delegate(HasIneqConstraints)
+class DakotaCONMIN(DakotaOptimizer):
+    """ CONMIN optimizer using DAKOTA.  """
+
+    implements(IHasIneqConstraints)
 
     max_iterations = Int(100, low=1, iotype='in',
-                         desc='Maximum number of iterations to execute')
+                         desc='Max number of iterations to execute')
+    max_function_evaluations = Int(1000, low=1, iotype='in',
+                                   desc='Max number of function evaluations')
     convergence_tolerance = Float(1.e-7, low=1.e-10, iotype='in',
                                   desc='Convergence tolerance')
+    constraint_tolerance = Float(1.e-7, low=1.e-10, iotype='in',
+                                 desc='Constraint tolerance')
     fd_gradient_step_size = Float(1.e-5, low=1.e-10, iotype='in',
                                   desc='Relative step size for gradients')
     interval_type = Enum(values=('forward', 'central'), iotype='in',
                          desc='Type of finite difference for gradients')
 
     def __init__(self):
-        super(DakotaOptimizer, self).__init__()
-        # DakotaBase leaves _max_objectives at 0.
+        super(DakotaCONMIN, self).__init__()
+        # DakotaOptimizer leaves _max_objectives at 0 (unlimited).
         self._hasobjectives._max_objectives = 1
 
-    def check_config(self):
-        """ Verify valid configuration. """
-        super(DakotaOptimizer, self).check_config()
-
-        parameters = self.get_parameters()
-        if not parameters:
-            self.raise_exception('No parameters, run aborted', ValueError)
-
-        objectives = self.get_objectives()
-        if not objectives:
-            self.raise_exception('No objectives, run aborted', ValueError)
-
-    def execute(self):
-        """ Write DAKOTA input and run. """
+    def configure_input(self):
+        """ Configures input specification. """
         ineq_constraints = self.get_ineq_constraints()
         objectives = self.get_objectives()
-        method = 'conmin_mfd' if ineq_constraints else 'conmin_frcg'
 
+        method = 'conmin_mfd' if ineq_constraints else 'conmin_frcg'
         self.input.method = [
             '%s' % method,
+            '    output = %s' % self.output,
             '    max_iterations = %s' % self.max_iterations,
-            '    convergence_tolerance = %s' % self.convergence_tolerance,
-        ]
+            '    max_function_evaluations = %s' % self.max_function_evaluations,
+            '    convergence_tolerance = %s' % self.convergence_tolerance]
+        if ineq_constraints:
+            self.input.method.append(
+                '    constraint_tolerance = %s' % self.constraint_tolerance)
+
         self.set_variables(need_start=True)
+
         self.input.responses = [
             'objective_functions = %s' % len(objectives)]
         if ineq_constraints:
@@ -236,131 +267,95 @@ class DakotaOptimizer(DakotaBase):
             '    fd_gradient_step_size = %s' % self.fd_gradient_step_size,
             '    no_hessians',
         ])
-        self.run_dakota()
 
 
 class DakotaMultidimStudy(DakotaBase):
-    """ Multidimensional parameter study using DAKOTA Python interface. """
+    """ Multidimensional parameter study using DAKOTA. """
 
     partitions = List(Int, low=1, iotype='in',
                       desc='List giving # of partitions for each parameter')
 
-    def check_config(self):
-        """ Verify valid configuration. """
-        super(DakotaMultidimStudy, self).check_config()
-
-        parameters = self.get_parameters()
-        if not parameters:
-            self.raise_exception('No parameters, run aborted', ValueError)
-
+    def configure_input(self):
+        """ Configures input specification. """
         if len(self.partitions) != self.total_parameters():
             self.raise_exception('#partitions (%s) != #parameters (%s)'
                                  % (len(self.partitions), self.total_parameters()),
                                  ValueError)
 
-        objectives = self.get_objectives()
-        if not objectives:
-            self.raise_exception('No objectives, run aborted', ValueError)
-
-    def execute(self):
-        """ Write DAKOTA input and run. """
         partitions = [str(partition) for partition in self.partitions]
         objectives = self.get_objectives()
 
         self.input.method = [
             'multidim_parameter_study',
-            '    partitions = %s' % ' '.join(partitions)
-        ]
+            '    output = %s' % self.output,
+            '    partitions = %s' % ' '.join(partitions)]
+
         self.set_variables(need_start=False)
+
         self.input.responses = [
             'objective_functions = %s' % len(objectives),
             'no_gradients',
-            'no_hessians',
-        ]
-        self.run_dakota()
+            'no_hessians']
 
 
 class DakotaVectorStudy(DakotaBase):
-    """ Vector parameter study using DAKOTA Python interface. """
+    """ Vector parameter study using DAKOTA. """
 
     final_point = List(Float, iotype='in',
                        desc='List of final parameter values')
     num_steps = Int(1, low=1, iotype='in',
                     desc='Number of steps along path to evaluate')
 
-    def check_config(self):
-        """ Verify valid configuration. """
-        super(DakotaVectorStudy, self).check_config()
-
-        parameters = self.get_parameters()
-        if not parameters:
-            self.raise_exception('No parameters, run aborted', ValueError)
-
-        if len(self.final_point) != self.total_parameters():
+    def configure_input(self):
+        """ Configures the input specification. """
+        n_params = self.total_parameters()
+        if len(self.final_point) != n_params:
             self.raise_exception('#final_point (%s) != #parameters (%s)'
-                                 % (len(self.final_point), self.total_parameters()),
+                                 % (len(self.final_point), n_params),
                                  ValueError)
 
-        objectives = self.get_objectives()
-        if not objectives:
-            self.raise_exception('No objectives, run aborted', ValueError)
-
-    def execute(self):
-        """ Write DAKOTA input and run. """
         final_point = [str(point) for point in self.final_point]
         objectives = self.get_objectives()
 
         self.input.method = [
+            'output = %s' % self.output,
             'vector_parameter_study',
             '    final_point = %s' % ' '.join(final_point),
-            '    num_steps = %s' % self.num_steps,
-        ]
+            '    num_steps = %s' % self.num_steps]
+
         self.set_variables(need_start=False)
+
         self.input.responses = [
             'objective_functions = %s' % len(objectives),
             'no_gradients',
-            'no_hessians',
-        ]
-        self.run_dakota()
+            'no_hessians']
 
 
 class DakotaGlobalSAStudy(DakotaBase):
-    """ Global sensitivity analysis using DAKOTA Python interface. """
+    """ Global sensitivity analysis using DAKOTA. """
 
     sample_type = Enum('lhs', iotype='in', values=('random', 'lhs'),
                        desc='Type of sampling')
     seed = Int(52983, iotype='in', desc='Seed for random number generator')
     samples = Int(100, iotype='in', low=1, desc='# of samples to evaluate')
 
-    def check_config(self):
-        """ Verify valid configuration. """
-        super(DakotaGlobalSAStudy, self).check_config()
-
-        parameters = self.get_parameters()
-        if not parameters:
-            self.raise_exception('No parameters, run aborted', ValueError)
-
-        objectives = self.get_objectives()
-        if not objectives:
-            self.raise_exception('No objectives, run aborted', ValueError)
-
-    def execute(self):
-        """ Write DAKOTA input and run. """
+    def configure_input(self):
+        """ Configures input specification. """
         objectives = self.get_objectives()
 
         self.input.method = [
             'sampling',
+            '    output = %s' % self.output,
             '    sample_type = %s' % self.sample_type,
             '    seed = %s' % self.seed,
-            '    samples = %s' % self.samples
-        ]
+            '    samples = %s' % self.samples]
+
         self.set_variables(need_start=False, uniform=True)
+
         names = ['%r' % name for name in objectives.keys()]
         self.input.responses = [
             'num_response_functions = %s' % len(objectives),
             'response_descriptors = %s' % ' '.join(names),
             'no_gradients',
-            'no_hessians',
-        ]
-        self.run_dakota()
+            'no_hessians']
 
