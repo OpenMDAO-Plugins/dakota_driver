@@ -162,7 +162,6 @@ class TestCase(unittest.TestCase):
 
     def tearDown(self):
         """ Cleanup files. """
-        return
         for pattern in ('LHS*', 'S4', 'dakota.out', 'dakota.err',
                         'dakota.rst', 'dakota_tabular.dat', 'driver.in'):
             for name in glob.glob(pattern):
