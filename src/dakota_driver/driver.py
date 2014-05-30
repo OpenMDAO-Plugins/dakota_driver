@@ -59,9 +59,9 @@ class DakotaBase(Driver):
                                  variables=[],
                                  responses=[])
 
-    def check_config(self):
+    def check_config(self, strict=False):
         """ Verify valid configuration. """
-        super(DakotaBase, self).check_config()
+        super(DakotaBase, self).check_config(strict=strict)
 
         parameters = self.get_parameters()
         if not parameters:
