@@ -59,9 +59,9 @@ class DakotaBase(Driver):
                                  variables=[],
                                  responses=[])
 
-    def check_config(self):
+    def check_config(self, strict=False):
         """ Verify valid configuration. """
-        super(DakotaBase, self).check_config()
+        super(DakotaBase, self).check_config(strict=strict)
 
         parameters = self.get_parameters()
         if not parameters:
@@ -193,7 +193,11 @@ class DakotaBase(Driver):
         fns = []
         for i, expr in enumerate(expressions):
             if asv[i] & 1:
-                fns.append(expr.evaluate(self.parent))
+                val = expr.evaluate(self.parent)
+                if isinstance(val, list):
+                    fns.extend(val)
+                else:
+                    fns.append(val)
             if asv[i] & 2:
                 self.raise_exception('Gradients not supported yet',
                                      NotImplementedError)
@@ -239,8 +243,8 @@ class DakotaCONMIN(DakotaOptimizer):
 
     def configure_input(self):
         """ Configures input specification. """
-        ineq_constraints = self.get_ineq_constraints()
         objectives = self.get_objectives()
+        ineq_constraints = self.total_ineq_constraints()
 
         method = 'conmin_mfd' if ineq_constraints else 'conmin_frcg'
         self.input.method = [
@@ -257,9 +261,11 @@ class DakotaCONMIN(DakotaOptimizer):
 
         self.input.responses = [
             'objective_functions = %s' % len(objectives)]
+
         if ineq_constraints:
             self.input.responses.append(
-                'nonlinear_inequality_constraints = %s' % len(ineq_constraints))
+                'nonlinear_inequality_constraints = %s' % ineq_constraints)
+
         self.input.responses.extend([
             'numerical_gradients',
             '    method_source dakota',
