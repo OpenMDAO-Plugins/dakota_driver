@@ -12,7 +12,7 @@ DAKOTA results.
     the outputs.
 """
 
-from numpy import array, ndindex
+from numpy import array
 
 from dakota import DakotaInput, run_dakota
 
@@ -20,10 +20,9 @@ from openmdao.main.datatypes.api import Bool, Enum, Float, Int, List, Str
 from openmdao.main.driver import Driver
 from openmdao.main.hasparameters import HasParameters
 from openmdao.main.hasconstraints import HasIneqConstraints
-from openmdao.main.hasobjective import HasObjective, HasObjectives
+from openmdao.main.hasobjective import HasObjectives
 from openmdao.main.interfaces import IHasParameters, IHasIneqConstraints, \
-                                     IHasObjective, IHasObjectives, \
-                                     IOptimizer, implements
+                                     IHasObjectives, IOptimizer, implements
 from openmdao.util.decorators import add_delegate
 
 __all__ = ['DakotaCONMIN', 'DakotaMultidimStudy', 'DakotaVectorStudy',
@@ -53,7 +52,7 @@ class DakotaBase(Driver):
         super(DakotaBase, self).__init__()
 
         # Set baseline input, don't touch 'interface'.
-        self.input = DakotaInput(strategy=['single_method'],
+        self.input = DakotaInput(environment=[],
                                  method=[],
                                  model=['single'],
                                  variables=[],
@@ -101,18 +100,18 @@ class DakotaBase(Driver):
         if need_start:
             initial = [str(val) for val in self.eval_parameters(dtype=None)]
             self.input.variables.append(
-                '    initial_point %s' % ' '.join(initial))
+                '  initial_point %s' % ' '.join(initial))
 
         self.input.variables.extend([
-            '    lower_bounds  %s' % ' '.join(lbounds),
-            '    upper_bounds  %s' % ' '.join(ubounds),
-            '    descriptors   %s' % ' '.join(names)
+            '  lower_bounds %s' % ' '.join(lbounds),
+            '  upper_bounds %s' % ' '.join(ubounds),
+            '  descriptors  %s' % ' '.join(names)
         ])
 
     def run_dakota(self):
         """
         Call DAKOTA, providing self as data, after enabling or disabling
-        tabular graphics data in the ``strategy`` section.
+        tabular graphics data in the ``environment`` section.
         DAKOTA will then call our :meth:`dakota_callback` during the run.
         """
         if not self.input.method:
@@ -122,20 +121,20 @@ class DakotaBase(Driver):
         if not self.input.responses:
             self.raise_exception('Responses not set', ValueError)
 
-        for i, line in enumerate(self.input.strategy):
+        for i, line in enumerate(self.input.environment):
             if 'tabular_graphics_data' in line:
                 if not self.tabular_graphics_data:
-                    self.input.strategy[i] = \
+                    self.input.environment[i] = \
                         line.replace('tabular_graphics_data', '')
                 break
         else:
             if self.tabular_graphics_data:
-                self.input.strategy.append('tabular_graphics_data')
+                self.input.environment.append('tabular_graphics_data')
 
         infile = self.get_pathname() + '.in'
-        self.input.write_input(infile)
+        self.input.write_input(infile, data=self)
         try:
-            run_dakota(infile, data=self, stdout=self.stdout, stderr=self.stderr)
+            run_dakota(infile, stdout=self.stdout, stderr=self.stderr)
         except Exception:
             self.reraise_exception()
 
@@ -171,8 +170,6 @@ class DakotaBase(Driver):
         dvv        derivative variables vector
         ---------- ----------------------------------------------
         currEvalId current evaluation ID number
-        ---------- ----------------------------------------------
-        user_data  this object
         ========== ==============================================
 
         """
@@ -249,13 +246,13 @@ class DakotaCONMIN(DakotaOptimizer):
         method = 'conmin_mfd' if ineq_constraints else 'conmin_frcg'
         self.input.method = [
             '%s' % method,
-            '    output = %s' % self.output,
-            '    max_iterations = %s' % self.max_iterations,
-            '    max_function_evaluations = %s' % self.max_function_evaluations,
-            '    convergence_tolerance = %s' % self.convergence_tolerance]
+            '  output = %s' % self.output,
+            '  max_iterations = %s' % self.max_iterations,
+            '  max_function_evaluations = %s' % self.max_function_evaluations,
+            '  convergence_tolerance = %s' % self.convergence_tolerance]
         if ineq_constraints:
             self.input.method.append(
-                '    constraint_tolerance = %s' % self.constraint_tolerance)
+                '  constraint_tolerance = %s' % self.constraint_tolerance)
 
         self.set_variables(need_start=True)
 
@@ -268,10 +265,10 @@ class DakotaCONMIN(DakotaOptimizer):
 
         self.input.responses.extend([
             'numerical_gradients',
-            '    method_source dakota',
-            '    interval_type %s' % self.interval_type,
-            '    fd_gradient_step_size = %s' % self.fd_gradient_step_size,
-            '    no_hessians',
+            '  method_source dakota',
+            '  interval_type %s' % self.interval_type,
+            '  fd_gradient_step_size = %s' % self.fd_gradient_step_size,
+            '  no_hessians',
         ])
 
 
@@ -293,8 +290,8 @@ class DakotaMultidimStudy(DakotaBase):
 
         self.input.method = [
             'multidim_parameter_study',
-            '    output = %s' % self.output,
-            '    partitions = %s' % ' '.join(partitions)]
+            '  output = %s' % self.output,
+            '  partitions = %s' % ' '.join(partitions)]
 
         self.set_variables(need_start=False)
 
@@ -312,6 +309,14 @@ class DakotaVectorStudy(DakotaBase):
     num_steps = Int(1, low=1, iotype='in',
                     desc='Number of steps along path to evaluate')
 
+    def __init__(self):
+        super(DakotaVectorStudy, self).__init__()
+        for dname in self._delegates_:
+            delegate = getattr(self, dname)
+            if isinstance(delegate, HasParameters):
+                delegate._allowed_types.append('unbounded')
+                break
+
     def configure_input(self):
         """ Configures the input specification. """
         n_params = self.total_parameters()
@@ -326,8 +331,8 @@ class DakotaVectorStudy(DakotaBase):
         self.input.method = [
             'output = %s' % self.output,
             'vector_parameter_study',
-            '    final_point = %s' % ' '.join(final_point),
-            '    num_steps = %s' % self.num_steps]
+            '  final_point = %s' % ' '.join(final_point),
+            '  num_steps = %s' % self.num_steps]
 
         self.set_variables(need_start=False)
 
@@ -351,10 +356,10 @@ class DakotaGlobalSAStudy(DakotaBase):
 
         self.input.method = [
             'sampling',
-            '    output = %s' % self.output,
-            '    sample_type = %s' % self.sample_type,
-            '    seed = %s' % self.seed,
-            '    samples = %s' % self.samples]
+            '  output = %s' % self.output,
+            '  sample_type = %s' % self.sample_type,
+            '  seed = %s' % self.seed,
+            '  samples = %s' % self.samples]
 
         self.set_variables(need_start=False, uniform=True)
 
