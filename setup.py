@@ -58,7 +58,7 @@ kwargs = {'author': '',
  'package_dir': {'': 'src'},
  'packages': ['dakota_driver', 'dakota_driver.test'],
  'url': 'https://github.com/OpenMDAO-Plugins/dakota_driver',
- 'version': '0.2.2',
+ 'version': '0.3',
  'zip_safe': False}
 
 

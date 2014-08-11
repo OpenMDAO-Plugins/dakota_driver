@@ -72,5 +72,5 @@ Package Metadata
 
 - **summary:** 'OpenMDAO drivers using DAKOTA (Design Analysis Kit for Optimization and Terascale Applications)'
 
-- **version:** 0.2.2
+- **version:** 0.3
 

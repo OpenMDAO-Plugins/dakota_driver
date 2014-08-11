@@ -133,9 +133,7 @@ class VectorStudy(Assembly):
         driver.final_point = [1.1, 1.3]
         driver.num_steps = 10
 
-        # Can't have parameter with no 'low' or 'high' defined.
-        driver.add_parameter('rosenbrock.x', start=(-0.3, 0.2),
-                             low=-1e10, high=1.e10)
+        driver.add_parameter('rosenbrock.x', start=(-0.3, 0.2))
         driver.add_objective('rosenbrock.f')
 
 
@@ -203,17 +201,12 @@ class TestCase(unittest.TestCase):
         logging.debug('test_constrained_optimization')
 
         top = set_as_top(ConstrainedOptimization())
-# Until DAKOTA accepts some patches the output is cumulative.
-        top.driver.tabular_graphics_data = False
         top.run()
         # Current state isn't optimium,
         # probably left over from CONMIN line search.
         assert_rel_error(self, top.textbook.x1, 0.5, 0.0004)
         assert_rel_error(self, top.textbook.x2, 0.43167254, 0.0004)
         assert_rel_error(self, top.textbook.f,  0.16682649, 0.0007)
-
-# Until DAKOTA accepts some patches the output is cumulative.
-        return
 
         with open('dakota_tabular.dat', 'rb') as inp:
             reader = csv.reader(inp, delimiter=' ', skipinitialspace=True)
@@ -242,14 +235,15 @@ class TestCase(unittest.TestCase):
         logging.debug('')
         logging.debug('test_broken_optimization')
 
-        raise nose.SkipTest('Requires abort_returns() modification to DAKOTA')
-
         top = set_as_top(ConstrainedOptimization())
-# Until DAKOTA accepts some patches the output is cumulative.
-        top.driver.tabular_graphics_data = False
-        top.textbook = Broken()
-        assert_raises(self, 'top.run()', globals(), locals(), RuntimeError,
-                      'driver: Evaluating x1=0.9, x2=1.1')
+        top.replace('textbook', Broken())
+        try:
+            top.run()
+        except RuntimeError as exc:
+            print exc
+            self.assertTrue('RuntimeError: Evaluating x1=0.9, x2=1.1' in str(exc))
+        else:
+            self.fail('Expected RuntimeError')
 
     def test_multidim(self):
         # Test DakotaMultidimStudy driver.
@@ -287,15 +281,10 @@ class TestCase(unittest.TestCase):
         logging.debug('test_sensitivity')
 
         top = set_as_top(SensitivityStudy())
-# Until DAKOTA accepts some patches the output is cumulative.
-        top.driver.tabular_graphics_data = False
         top.run()
         assert_rel_error(self, top.rosenbrock.x[0],  1.091489532, 0.00001)
         assert_rel_error(self, top.rosenbrock.x[1], -1.415779759, 0.00001)
         assert_rel_error(self, top.rosenbrock.f,   679.7206145, 0.00001)
-
-# Until DAKOTA accepts some patches the output is cumulative.
-        return
 
         with open('dakota_tabular.dat', 'rb') as inp:
             reader = csv.reader(inp, delimiter=' ', skipinitialspace=True)
