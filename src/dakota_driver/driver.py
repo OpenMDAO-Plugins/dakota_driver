@@ -5,11 +5,6 @@ method type.
 
 Currently these drivers simply run the workflow, they do not parse any
 DAKOTA results.
-
-.. note::
-    Until DAKOTA implements some patches output streams are not closed until
-    the process exits. Multiple runs, even from separate drivers, append to
-    the outputs.
 """
 
 from numpy import array
@@ -79,16 +74,9 @@ class DakotaBase(Driver):
         self.configure_input()
         self.run_dakota()
 
-    def set_variables(self, need_start, uniform=False):
+    def set_variables(self, need_start, uniform=False, need_bounds=True):
         """ Set :class:`DakotaInput` ``variables`` section. """
         parameters = self.get_parameters()
-
-        lbounds = [str(val) for val in self.get_lower_bounds(dtype=None)]
-        ubounds = [str(val) for val in self.get_upper_bounds(dtype=None)]
-        names = []
-        for param in parameters.values():
-            for name in param.names:
-                names.append('%r' % name)
 
         if uniform:
             self.input.variables = [
@@ -102,11 +90,21 @@ class DakotaBase(Driver):
             self.input.variables.append(
                 '  initial_point %s' % ' '.join(initial))
 
-        self.input.variables.extend([
-            '  lower_bounds %s' % ' '.join(lbounds),
-            '  upper_bounds %s' % ' '.join(ubounds),
+        if need_bounds:
+            lbounds = [str(val) for val in self.get_lower_bounds(dtype=None)]
+            ubounds = [str(val) for val in self.get_upper_bounds(dtype=None)]
+            self.input.variables.extend([
+                '  lower_bounds %s' % ' '.join(lbounds),
+                '  upper_bounds %s' % ' '.join(ubounds)])
+
+        names = []
+        for param in parameters.values():
+            for name in param.names:
+                names.append('%r' % name)
+
+        self.input.variables.append(
             '  descriptors  %s' % ' '.join(names)
-        ])
+        )
 
     def run_dakota(self):
         """
@@ -334,7 +332,7 @@ class DakotaVectorStudy(DakotaBase):
             '  final_point = %s' % ' '.join(final_point),
             '  num_steps = %s' % self.num_steps]
 
-        self.set_variables(need_start=False)
+        self.set_variables(need_start=False, need_bounds=False)
 
         self.input.responses = [
             'objective_functions = %s' % len(objectives),

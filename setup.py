@@ -57,14 +57,16 @@ kwargs = {'author': '',
                                     'sphinx_build/html/_modules/index.html',
                                     'sphinx_build/html/_modules/dakota_driver/driver.html',
                                     'sphinx_build/html/_modules/dakota_driver/test/test_driver.html',
+                                    'test/test.tee',
                                     'test/__init__.py',
+                                    'test/core',
                                     'test/openmdao_log.txt',
                                     'test/test_driver.py',
                                     'test/.coverage']},
  'package_dir': {'': 'src'},
  'packages': ['dakota_driver', 'dakota_driver.test'],
  'url': 'https://github.com/OpenMDAO-Plugins/dakota_driver',
- 'version': '0.2.2',
+ 'version': '0.3',
  'zip_safe': False}
 
 
