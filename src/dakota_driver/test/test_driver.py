@@ -59,7 +59,7 @@ class Optimization(Assembly):
     def configure(self):
         """ Configure driver and its workflow. """
         super(Assembly, self).configure()
-        self.add('rosenbrock', Rosenbrock()) 
+        self.add('rosenbrock', Rosenbrock())
 
         driver = self.add('driver', DakotaCONMIN())
         driver.workflow.add('rosenbrock')
@@ -81,7 +81,7 @@ class ConstrainedOptimization(Assembly):
     def configure(self):
         """ Configure driver and its workflow. """
         super(Assembly, self).configure()
-        self.add('textbook', Textbook()) 
+        self.add('textbook', Textbook())
 
         driver = self.add('driver', DakotaCONMIN())
         driver.workflow.add('textbook')
@@ -106,7 +106,7 @@ class ParameterStudy(Assembly):
     def configure(self):
         """ Configure driver and its workflow. """
         super(Assembly, self).configure()
-        self.add('rosenbrock', Rosenbrock()) 
+        self.add('rosenbrock', Rosenbrock())
 
         driver = self.add('driver', DakotaMultidimStudy())
         driver.workflow.add('rosenbrock')
@@ -124,7 +124,7 @@ class VectorStudy(Assembly):
     def configure(self):
         """ Configure driver and its workflow. """
         super(Assembly, self).configure()
-        self.add('rosenbrock', Rosenbrock()) 
+        self.add('rosenbrock', Rosenbrock())
 
         driver = self.add('driver', DakotaVectorStudy())
         driver.workflow.add('rosenbrock')
@@ -143,7 +143,7 @@ class SensitivityStudy(Assembly):
     def configure(self):
         """ Configure driver and its workflow. """
         super(Assembly, self).configure()
-        self.add('rosenbrock', Rosenbrock()) 
+        self.add('rosenbrock', Rosenbrock())
 
         driver = self.add('driver', DakotaGlobalSAStudy())
         driver.workflow.add('rosenbrock')
@@ -241,7 +241,7 @@ class TestCase(unittest.TestCase):
             top.run()
         except RuntimeError as exc:
             print exc
-            self.assertTrue('RuntimeError: Evaluating x1=0.9, x2=1.1' in str(exc))
+            self.assertTrue('driver: Evaluating x1=0.9, x2=1.1' in str(exc))
         else:
             self.fail('Expected RuntimeError')
 
